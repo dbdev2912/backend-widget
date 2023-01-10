@@ -88,7 +88,7 @@ app.post(`/api/${ unique_string }/page/update`, ( req, res ) => {
                         }
                     },
                     ( err, result ) => {
-                        console.log("updated")
+
                         res.send( {success: true} )
                 });
             }
@@ -123,6 +123,23 @@ app.post(`/api/${unique_string}/page/widget/by/url`, (req, res) => {
     })
 })
 
+app.post(`/api/${unique_string}/api/new`, (req, res) => {
+
+    const { api } = req.body;
+    const { tables } = api;
+
+    for(let i = 0; i < tables.length; i++){
+        let table = tables[i];
+        table.fields = table.fields.filter( f => f.is_hidden != true )
+        table.fields = table.fields.map( f => { return { ...f, is_hidden: null } } )
+    }
+    connector( dbo => {
+        dbo.collection('api').insertOne(api, (err, result) => {
+
+            res.send({success: true})
+        })
+    })
+})
 
 app.get('/api/session/check', (req, res) => {
     const credential = req.session.credential;
