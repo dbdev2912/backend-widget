@@ -109,6 +109,7 @@ app.get(`/api/${unique_string}/page/:id`, (req, res) => {
     connector( dbo => {
         dbo.collection("ml_admin_pages").findOne({ id }, (err, result)=> {
             const page = result;
+
             res.send({ page });
         })
     })
@@ -130,13 +131,144 @@ app.post(`/api/${unique_string}/api/new`, (req, res) => {
 
     for(let i = 0; i < tables.length; i++){
         let table = tables[i];
-        table.fields = table.fields.filter( f => f.is_hidden != true )
-        table.fields = table.fields.map( f => { return { ...f, is_hidden: null } } )
+        table.fields = table.fields.filter( f => f.is_hidden === true )
     }
     connector( dbo => {
         dbo.collection('api').insertOne(api, (err, result) => {
 
             res.send({success: true})
+        })
+    })
+})
+
+app.post(`/api/${unique_string}/api/update`, (req, res) => {
+
+    const { api } = req.body;
+    const { tables } = api;
+
+    for(let i = 0; i < tables.length; i++){
+        let table = tables[i];
+        table.fields = table.fields.filter( f => f.is_hidden === true )
+    }
+    connector( dbo => {
+        dbo.collection('api').updateOne( { id: api.id }, { $set: {
+            tables: api.tables,
+            title: api.title,
+            note: api.note
+        }} , (err, result) => {
+
+            res.send({success: true})
+        })
+    })
+})
+
+app.get(`/api/${unique_string}/apis`, ( req, res ) => {
+    connector( dbo => {
+        dbo.collection('api').find({}).toArray((err, result)=>{
+            res.send({ apis: result })
+        })
+    } )
+})
+
+const retrieveDataFromApi = (res, api, data, currentIndex, callback) => {
+
+    const limit = api.tables.length;
+
+    if( currentIndex === limit){
+
+        const { tables } = api;
+        for( let i = 0; i < limit; i++ ){
+            let tb = tables[i];
+            let fk = tb.foreign_keys;
+
+            for( let j = 0 ; j < fk.length; j++){
+                const { rel, on } = fk[j];
+
+                if( data[tb.name] ){
+                    data[tb.name] = data[tb.name].map( d => {
+                        let tmp = d;
+                        if( tmp.fk_data ){
+
+                            for( let k = 0; k < d.fk_data.length; k++ ){
+                                let fk_row_data = d.fk_data[k];
+                                let data_from_foreign_table = data[ fk_row_data.rel ] ?
+                                    data[ fk_row_data.rel ].filter( inner_data => inner_data[on] === fk_row_data.data[on] )[0]
+                                    : {};
+                                tmp = {...tmp, ...data_from_foreign_table}
+                            }
+                        }
+                        delete tmp.fk_data;
+                        return tmp;
+                    })
+                }
+            }
+        }
+        const weakEntities = tables.filter( tb => tb.foreign_keys.length > 0 );
+        const finalData = mergeWeakEntitiesData( weakEntities, data, 0, [] )
+
+        const fields = [];
+
+        for( let i = 0; i < tables.length; i++ ){
+            let table = tables[i];
+            for( let j = 0; j < table.fields.length; j++){
+                fields.push(table.fields[j].name);
+            }
+        }
+
+        res.send({ data: finalData.map( data => {
+            let filtedData = {}
+            for( let i = 0; i < fields.length; i++){
+                filtedData[ fields[i] ] = data[fields[i]]
+            }
+            return filtedData
+        })
+    })
+
+    }else{
+        connector(dbo => {
+            dbo.collection( api.tables[currentIndex].name ).find({}).toArray( (err, result) => {
+                data[`${api.tables[currentIndex].name}`] = result;
+                callback(retrieveDataFromApi(res, api, data, currentIndex + 1, callback))
+            })
+        })
+    }
+}
+
+const mergeWeakEntitiesData = (entities, data, index, result) => {
+    const limit = entities.length;
+    if( index === limit - 1 ){
+        currentEntity = entities[index];
+        return data[currentEntity.name];
+    }else{
+        currentEntity = entities[index];
+        currentData = data[currentEntity.name];
+        result = currentData.map( data => {
+            data = {...data, ...mergeWeakEntitiesData(entities, data, index + 1, result) }
+            return data;
+        })
+        return result;
+    }
+}
+
+app.get(`/api/${unique_string}/retrieve/api/:id`, (req, res) => {
+    const { id } = req.params;
+    connector( dbo => {
+        dbo.collection('api').findOne({id: id}, (err, result) => {
+            const api = result;
+
+            retrieveDataFromApi(res, api, {}, 0, (result) => {
+
+            })
+        })
+    })
+})
+
+app.get(`/api/${unique_string}/api/:id`, (req, res) => {
+    const { id } = req.params;
+    connector( dbo => {
+        dbo.collection('api').findOne({id: id}, (err, result) => {
+            const api = result;
+            res.send({ api })
         })
     })
 })
