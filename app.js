@@ -68,6 +68,34 @@ app.get(`/api/${unique_string}/navbar`, ( req, res ) => {
     })
 })
 
+app.get(`/api/${unique_string}/banner`, ( req, res ) => {
+    connector( dbo => {
+        dbo.collection('ml_admin_ui_widget').findOne({ name: "ui-banner" }, (err, result) => {
+            res.send({ widgets: result?result.widgets: {} })
+        })
+    })
+})
+
+app.post(`/api/${unique_string}/banner/update`, ( req, res ) => {
+    const { widgets } = req.body;
+    connector( dbo => {
+        dbo.collection("ml_admin_ui_widget").findOne( {"name": "ui-banner"}, ( err, result ) => {
+            if( !result ){
+                dbo.collection("ml_admin_ui_widget").insert({"name": "ui-banner", "widgets": widgets }, ( err, result ) => {
+                    res.send({ success: true })
+                })
+            }else{
+
+                dbo.collection("ml_admin_ui_widget").update({"name": "ui-banner"}, { $set: { widgets: widgets } }, ( err, result ) => {
+                    res.send({ success: true })
+                })
+            }
+        })
+
+    })
+})
+
+
 app.post(`/api/${ unique_string }/page/update`, ( req, res ) => {
 
     const { page } = req.body;
@@ -118,7 +146,7 @@ app.get(`/api/${unique_string}/page/:id`, (req, res) => {
 app.post(`/api/${unique_string}/page/widget/by/url`, (req, res) => {
     const { dynamic_url } = req.body;
     connector( dbo => {
-        dbo.collection("ml_admin_pages").findOne({ url: `/${dynamic_url}` }, (err, result) =>{
+        dbo.collection("ml_admin_pages").findOne({ url: `${dynamic_url}` }, (err, result) =>{
             res.send({ page: result })
         })
     })
@@ -171,7 +199,7 @@ app.get(`/api/${unique_string}/apis`, ( req, res ) => {
 })
 
 const retrieveDataFromApi = (res, api, data, currentIndex, callback) => {
-
+    /* duplicated field auto remove bug must be fixed */
     const limit = api.tables.length;
 
     if( currentIndex === limit){
@@ -255,10 +283,11 @@ app.get(`/api/${unique_string}/retrieve/api/:id`, (req, res) => {
     connector( dbo => {
         dbo.collection('api').findOne({id: id}, (err, result) => {
             const api = result;
+            if( api ){
+                retrieveDataFromApi(res, api, {}, 0, (result) => {
 
-            retrieveDataFromApi(res, api, {}, 0, (result) => {
-
-            })
+                })
+            }
         })
     })
 })
